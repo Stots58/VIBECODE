@@ -1,0 +1,246 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0"/>
+  <title>Avoiding Your Extroverted Friends</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      background: #222;
+      color: #fff;
+      font-family: 'Courier New', monospace;
+      overflow: hidden;
+    }
+    canvas {
+      background: #111;
+      display: block;
+      margin: 20px auto;
+      border: 4px solid #fff;
+    }
+    #info {
+      text-align: center;
+      margin-top: 10px;
+      font-size: 1rem;
+      color: #ccc;
+    }
+    #endScreen, #startOverlay {
+      position: absolute;
+      top: 0;
+      left: 0;
+      width: 100vw;
+      height: 100vh;
+      background: rgba(0, 0, 0, 0.95);
+      color: #fff;
+      display: none;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+      font-size: 1.5rem;
+      z-index: 10;
+      text-align: center;
+      padding: 20px;
+    }
+    #startOverlay {
+      display: flex;
+    }
+    #endScreen button, #startOverlay button {
+      margin-top: 20px;
+      font-size: 1.2rem;
+      padding: 10px 20px;
+      cursor: pointer;
+      background: #4caf50;
+      border: none;
+      border-radius: 5px;
+      color: #fff;
+    }
+    #startOverlay button:hover, #endScreen button:hover {
+      background: #66bb6a;
+    }
+  </style>
+</head>
+<body>
+  <canvas id="gameCanvas" width="640" height="480"></canvas>
+  <div id="info">Use arrow keys to move. Escape your extroverted friends by reaching the green tile!</div>
+
+  <div id="startOverlay">
+    <div>
+      <h2>Avoiding Your Extroverted Friends</h2>
+      <p>You're an introverted person, just enjoying some peace and quiet at home...</p>
+      <p>But your extroverted friends have broken into your house to drag you out for “fun.” 😱</p>
+      <p>Use the arrow keys to escape through the green exit before they catch you!</p>
+      <p><em>(Press any key to start)</em></p>
+      <button id="chaseModeBtn">Enable Chase Mode</button>
+    </div>
+  </div>
+
+  <div id="endScreen">
+    <div id="endMessage"></div>
+    <button onclick="location.reload()">Play Again</button>
+  </div>
+
+  <script>
+    const canvas = document.getElementById('gameCanvas');
+    const ctx = canvas.getContext('2d');
+    const tileSize = 20;
+    const houseMap = [
+      "##############################",
+      "#...........................#",
+      "#.######.#.#######.#.######.#",
+      "#.#......#.........#......#.#",
+      "#.#.###########.#.#########.#",
+      "#.#.#.........#.#.........#.#",
+      "#.#.#.#######.#.#######.#.#.#",
+      "#.#.#.......#.#.......#.#.#.#",
+      "#.#.#######.#.#######.#.#.#.#",
+      "#.#.........#.........#.#.#.#",
+      "#.############.############.E",
+      "#...........................#",
+      "##############################"
+    ];
+
+    const player = { x: 1, y: 1, color: '#0f0' };
+
+    const enemies = [
+      { x: 10, y: 10, color: '#f00', strategy: 'follow' },
+      { x: 20, y: 2, color: '#f0f', strategy: 'predict' },
+      { x: 5, y: 7, color: '#0ff', strategy: 'follow' },
+      { x: 25, y: 8, color: '#ff0', strategy: 'predict' }
+    ];
+
+    const endScreen = document.getElementById("endScreen");
+    const endMessage = document.getElementById("endMessage");
+    const startOverlay = document.getElementById("startOverlay");
+    const chaseModeBtn = document.getElementById("chaseModeBtn");
+
+    let chaseMode = false;
+    chaseModeBtn.addEventListener('click', () => {
+      chaseMode = true;
+      chaseModeBtn.textContent = "Chase Mode Activated!";
+      chaseModeBtn.disabled = true;
+    });
+
+    function showEndScreen(message) {
+      endMessage.textContent = message;
+      endScreen.style.display = 'flex';
+    }
+
+    function drawFace(x, y, color) {
+      const px = x * tileSize;
+      const py = y * tileSize;
+      ctx.shadowColor = color;
+      ctx.shadowBlur = 10;
+      ctx.fillStyle = color;
+      ctx.fillRect(px, py, tileSize, tileSize);
+      ctx.shadowBlur = 0;
+      ctx.fillStyle = '#fff';
+      ctx.fillRect(px + 4, py + 5, 3, 3);
+      ctx.fillRect(px + 13, py + 5, 3, 3);
+      ctx.fillStyle = '#000';
+      ctx.fillRect(px + 6, py + 13, 8, 2);
+    }
+
+    function drawMap() {
+      for (let y = 0; y < houseMap.length; y++) {
+        for (let x = 0; x < houseMap[y].length; x++) {
+          const tile = houseMap[y][x];
+          if (tile === '#') {
+            ctx.fillStyle = '#666';
+          } else if (tile === 'E') {
+            ctx.fillStyle = '#4caf50';
+          } else {
+            ctx.fillStyle = '#222';
+          }
+          ctx.fillRect(x * tileSize, y * tileSize, tileSize, tileSize);
+        }
+      }
+    }
+
+    function isWalkable(x, y) {
+      return houseMap[y] && ['.', 'E'].includes(houseMap[y][x]);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      drawMap();
+      drawFace(player.x, player.y, player.color);
+      enemies.forEach(e => drawFace(e.x, e.y, e.color));
+    }
+
+    function moveEnemy(enemy) {
+      let dx = player.x - enemy.x;
+      let dy = player.y - enemy.y;
+
+      const speed = chaseMode ? 2 : 1;
+      for (let i = 0; i < speed; i++) {
+        if (enemy.strategy === 'follow') {
+          let moved = false;
+          if (Math.abs(dx) > Math.abs(dy)) {
+            if (dx > 0 && isWalkable(enemy.x + 1, enemy.y)) { enemy.x++; moved = true; }
+            else if (dx < 0 && isWalkable(enemy.x - 1, enemy.y)) { enemy.x--; moved = true; }
+          }
+          if (!moved) {
+            if (dy > 0 && isWalkable(enemy.x, enemy.y + 1)) enemy.y++;
+            else if (dy < 0 && isWalkable(enemy.x, enemy.y - 1)) enemy.y--;
+          }
+        } else if (enemy.strategy === 'predict') {
+          let futureX = player.x + (dx > 0 ? 1 : dx < 0 ? -1 : 0);
+          let futureY = player.y + (dy > 0 ? 1 : dy < 0 ? -1 : 0);
+
+          if (isWalkable(futureX, futureY)) {
+            if (enemy.x < futureX && isWalkable(enemy.x + 1, enemy.y)) enemy.x++;
+            else if (enemy.x > futureX && isWalkable(enemy.x - 1, enemy.y)) enemy.x--;
+            else if (enemy.y < futureY && isWalkable(enemy.x, enemy.y + 1)) enemy.y++;
+            else if (enemy.y > futureY && isWalkable(enemy.x, enemy.y - 1)) enemy.y--;
+          }
+        }
+
+        if (enemy.x === player.x && enemy.y === player.y) {
+          showEndScreen("😱 They caught you! Time to go out and be social...");
+          cancelAnimationFrame(animationId);
+        }
+      }
+    }
+
+    function update() {
+      enemies.forEach(moveEnemy);
+    }
+
+    let animationId;
+    function gameLoop() {
+      update();
+      draw();
+      if (houseMap[player.y][player.x] === 'E') {
+        showEndScreen("🎉 You escaped! Time to introvert in peace.");
+        cancelAnimationFrame(animationId);
+        return;
+      }
+      animationId = requestAnimationFrame(gameLoop);
+    }
+
+    let gameStarted = false;
+    function startGame() {
+      if (!gameStarted) {
+        gameStarted = true;
+        startOverlay.style.display = 'none';
+        gameLoop();
+      }
+    }
+
+    document.addEventListener('keydown', e => {
+      startGame();
+      let newX = player.x;
+      let newY = player.y;
+      if (e.key === 'ArrowUp') newY--;
+      if (e.key === 'ArrowDown') newY++;
+      if (e.key === 'ArrowLeft') newX--;
+      if (e.key === 'ArrowRight') newX++;
+
+      if (isWalkable(newX, newY)) {
+        player.x = newX;
+        player.y = newY;
+      }
+    });
+  </script>
+</body>
+</html>
